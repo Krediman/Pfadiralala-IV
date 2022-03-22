@@ -49,6 +49,13 @@ def filter_suffix(dir_content:Set[pfad], suffix:Union[str, Collection[str]]):
                 break
     return erg
 
+def is_newer(file1:pfad, file2:pfad):
+    # gibt True, wenn die letzte Änderung von file1 jüngeren Datums ist als die letzte Änderung von file2
+    #Die Zeit wird in sekunden sein dem Anfang der Zeit(UNIX) angegeben. eine größere Zahl entspricht einer neueren Datei
+    time1 = os.path.getmtime(file1)
+    time2 = os.path.getmtime(file2)
+    return time1 > time2
+
 
 def get_inaccessable(dir_content:Set[pfad], access=os.R_OK) -> Set[pfad]:
     # Gibt alle dateien zurück, auf die nicht lesend [schreibend/ausführend] (abhängig von access)
@@ -109,21 +116,33 @@ def getInfiles(directory:pfad) -> Set[pfad]:
     return get_accessable(filter_suffix(get_files(get_dir_content(directory)), insuffixes), os.R_OK)
 
 
-def fileIsWriteable(datei:pfad, allow_overwrite=False) -> bool:
+def fileIsWriteable(datei:pfad, allow_overwrite:str, referenz:pfad =None) -> bool:
     # datei kann geschrieben werden und (es darf überschrieben werden oder die datei existiert nicht.)
+    # allow_overwrite erkenne die Werte "all", "newer" und "older". Für "newer" und "older" ist eine Referenzdatei nötig.
     if os.path.exists(datei):
-        # der pfad existiert.
-        if os.path.isfile(datei) and allow_overwrite:  # ist es eine datei und ist überschreiben erlaubt
-            # funktioniert auch für verknüpfungen, deren ziel schreibbar ist
-            return os.access(datei, os.W_OK) 
+        # Der gegebene Pfad existiert. prüfe, ob es sich um reine Datei handelt
+        # und ob sie geschriebn werden darf.
+        if os.path.isfile(datei) and os.access(datei, os.W_OK):
+            if allow_overwrite == "all":
+                return True #Der einfache Fall
+            #keine Referenz angegeben, aber eine relative Prüfung gefordert -> verbiete das überschreiben
+            if referenz is None:
+                return False
+            # erlaube
+            elif allow_overwrite == "newer" and is_newer(datei, referenz):
+                return True
+            elif allow_overwrite == "older" and is_newer(referenz, datei):
+                return True
+            else: return False
         else:
-            return False  # es handelt sich um ein verzeichnis oder wir dürfen nicht überschreiben(das heißt nicht, dass es nicht möglich wäre) 
-    # datei existier nicht. Überprüfe schreibrechte im Ordner
-    pdir = os.path.dirname(datei)
-    if not pdir:
-        pdir = '.'
-    # Die datei kann erzeugt werden, falls in das verzeichnis geschrieben werde kann.
-    return os.access(pdir, os.W_OK)
+            return False  # es handelt sich um ein Verzeichnis oder wir dürfen nicht überschreiben(das heißt nicht, dass es nicht möglich wäre)
+    else:
+        # Datei existiert nicht. Überprüfe Schreibrechte im Ordner
+        pdir = os.path.dirname(datei)
+        if not pdir:
+            pdir = '.'
+        # Die Datei kann erzeugt werden, falls in das Verzeichnis geschrieben werde kann.
+        return os.access(pdir, os.W_OK)
 
 def rewriteFilename(dateiname:str) -> str:
     # Beschränkt den Dateinamen auf die Zeichen A-Z a-z 0-9 .-_+ (ohne Leerzeichen)
@@ -185,14 +204,17 @@ def rewriteFilename(dateiname:str) -> str:
 if __name__== '__main__':
     # Aufrufparameter lesen
     moreOutput = False
-    overwrite = False
+    overwrite = "no"
     rewriteFilenames = False
     if len(sys.argv) >= 3:
         indir, outdir = sys.argv[-2:]
         # TODO: Wie liest man am einfachsten mehrere Argumente in der Form -oav statt -o -a -v
-        if len(sys.argv) > 3 and '-o' in sys.argv[1:-2]:
-            # Überschreiben ist erlaubt
-            overwrite = True
+        if len(sys.argv) > 3 and '-o' in sys.argv[1:-2] and not '-O' in sys.argv[1:-2]:
+            # Überschreiben ist erlaubt wenn die Zieldatei älter ist, als die Quelldatei
+            overwrite = "older"
+        if len(sys.argv) > 3 and '-O' in sys.argv[1:-2] and not '-o' in sys.argv[1:-2]:
+            # Überschreiben ist erlaubt (auch wenn die Zieldatei neuer ist)
+            overwrite = "all"
         if len(sys.argv) > 3 and '-a' in sys.argv[1:-2]:
             # jede Datei soll konvertiert werden
             insuffixes.add('')
@@ -203,16 +225,19 @@ if __name__== '__main__':
             # mehr ausgabe
             rewriteFilenames=True
     else:
-        print('''Benutzung: converter.py [-o] [-a] [-v] Eingabeverzeichnis Ausgabeverzeichnis
+        print('''Benutzung: converter.py [-o|-O] [-a] [-v] Eingabeverzeichnis Ausgabeverzeichnis
             Konvertiert Lieder aus EINGABEVERZEICHNIS und speichert die Latexversion in AUSGABEVERZEICHNIS.
             Dabei werden nur Dateien verarbeitet, die auf .txt oder .lied enden.
             
             OPTIONEN:
+            -o  Überschreibe vorhandene Dateien im Zielverzeichnis,
+                wenn die Quelldatei neuer ist als die Zieldatei (gemessen am Änderungsdatum)
             -o  Überschreibe vorhandene Dateien im Zielverzeichnis
-            -a  alle Dateien verarbeiten (unabhängig vom suffix)
+                (unabhängig vom Änderungsdatum)
+            -a  alle Dateien verarbeiten (unabhängig von der Endung)
             -v  mehr Ausgabe
             -r  Dateinamen umschreiben: entfernt alle Leer- und Sonderzeichen 
-                und schreibt den ersten Buchstaben jedes Wortes groß.''', file=sys.stderr)
+                und schreibt den ersten Buchstaben jedes Wortes des Dateinamens groß.''', file=sys.stderr)
         sys.exit(1)
     if not (os.path.isdir(indir)):
         raise Exception('dirctory "'+indir+'" not found')
@@ -236,7 +261,7 @@ if __name__== '__main__':
         outpath = build_path(outdir, outfilename)     # Ausgabepfad
 
         # Prüfen, ob Ausgabedatei geschrieben werden kann / darf.
-        if not fileIsWriteable(outpath, overwrite):
+        if not fileIsWriteable(outpath, overwrite, referenz=infile):
             print(outfilename, ' darf nicht überschrieben werden. ', infile.name, ' wird übersprungen.', file=sys.stderr)
             continue # Datei überspringen
         

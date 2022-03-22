@@ -1,5 +1,6 @@
 # Konfiguration: Benötigt von lib/texttype/SongLaTexttype
 from typing import List, Dict
+
 # l: Mollakkorde in Kleinbuchstaben, m: mit m (e-> Em), (Leer): Keine Änderung
 Akkordstil = 'm'
 
@@ -10,7 +11,7 @@ INFOREGEX = r'^\s?@?info((:\s*)|\s+)'      # Bezeichnung des Infoblockes
 
 AKKORDREGEX = r'\S+' # muss einfach nur alles fressen, was möglicherweise ein Akkord sein könnte.
 
-#regulärer Ausdruck für ZEilen, die nur Akkorde enthalten (spezifisch, soll nicht auf normalen Text passen)
+#regulärer Ausdruck für Zeilen, die nur Akkorde enthalten (spezifisch, soll nicht auf normalen Text passen)
 akkord_zeilen_regex = r'( *([:|]+|(\(?([A-Ha-h](#|b)?(sus|dim|add|m(aj)?)?\d*)(\/([A-Ha-h](#|b)?(sus|dim|add|maj)?\d*))*\)?)))+ *'
 #regulärer Ausdruck für einen Akkord (spezifisch, soll nicht auf normalen Text passen)
 akkord_regex = r'(\(?([A-Ha-h](#|b)?(sus|dim|add|m(aj)?)?\d*)(\/([A-Ha-h](#|b)?(sus|dim|add|maj)?\d*))*\)?)'
@@ -18,7 +19,7 @@ akkord_regex = r'(\(?([A-Ha-h](#|b)?(sus|dim|add|m(aj)?)?\d*)(\/([A-Ha-h](#|b)?(
 #WDHLREGEX = r'[/|]{1,2}\:' #Im Moment nicht Verwendet
 #WDHRREGEX = r'\:[/|]{1,2}' #Im Moment nicht Verwendet
 
-# Liste der ersetzungen, die in den zeilen passieren soll
+# Liste der Ersetzungen, die in den Zeilen passieren soll
 Ersetzungen = []
 #Formatierungen: bevor und nachdem die Akkorde mit dem Text zusammengesetzt werden, können Formatierungen am Text vorgenommen werden. 
 # beim zusammensetzen werden Text und Akkorde in eine Zeile geschrieben. Änderungen, die an den Akkordzeilen geschen, sollten also vorher gemacht werden. 
@@ -26,11 +27,11 @@ Ersetzungen = []
 #Eingabe und ausgabe sind Listen, die einen String für jede zeile enthalten.
 
 def _WdhErsetzungen(line: str) -> str:
-    """ erseetzt wiederholungen durch den dazugehörigen Latexbefehl"""
+    """ ersetzt Wiederholungen durch den dazugehörigen Latexbefehl"""
     # Stelle sicher, dass nach \lrep bzw. \rrep ein leerzeichen folgt. auch wenn es in der eingabe vergessen wurde.
     return line.replace("||:", r" \lrep ").replace("|:", r" \lrep ").replace(":||", r" \rrep ").replace(":|", r" \rrep ") #TODO: das geht schöner
 
-#sollte ursprünglich umlaute ersetzen, tatsächlich sind wegen \usepackage{inputenc} im allgemeinen keine nötig
+#Hiermit können beliebige zeichen im Text durch besonderen Latex-Code ersetzt werden. Das sollte ursprünglich Umlaute ersetzen, tatsächlich sind wegen \usepackage{inputenc} im allgemeinen keine Ersetzungen nötig.
 _UmlErsetzungen = { #"ä":r'{\"a}',
                     #"ö":r'{\"o}',
                     #"ü":r'{\"u}',
